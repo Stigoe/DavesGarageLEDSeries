@@ -15,21 +15,42 @@
 //---------------------------------------------------------------------------
 
 #include <Arduino.h>            // Arduino Framework
-#include <U8g2lib.h>            // For text on the little on-chip OLED
+//#include <U8g2lib.h>            // For text on the little on-chip OLED
 #define FASTLED_INTERNAL        // Suppress build banner
 #include <FastLED.h>
 
-#define OLED_CLOCK  15          // Pins for the OLED display
-#define OLED_DATA   4
-#define OLED_RESET  16
+// MQTT
+#include <WiFi.h>
+#include <PubSubClient.h>
+
+const char* ssid = "Tradlosnettverk";
+const char* password = "qwertyuiopasd";
+
+// ADD MQTT Broker
+// MQTT Server address
+const char* mqtt_server = "10.10.10.115";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg[50];
+int value = 0;
+
+//#define OLED_CLOCK  15          // Pins for the OLED display
+//#define OLED_DATA   4
+//#define OLED_RESET  16
 
 #define NUM_LEDS    40          // FastLED definitions
 #define LED_PIN     5
+int iCooling = 40;
+int iSparking = 300;
+int iSparks = 20;
+int iSparkheight = 12;
 
 CRGB g_LEDs[NUM_LEDS] = {0};    // Frame buffer for FastLED
 
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_OLED(U8G2_R2, OLED_RESET, OLED_CLOCK, OLED_DATA);
-int g_lineHeight = 0;
+//U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_OLED(U8G2_R2, OLED_RESET, OLED_CLOCK, OLED_DATA);
+//int g_lineHeight = 0;
 int g_Brightness = 255;         // 0-255 LED brightness scale
 int g_PowerLimit = 3000;         // 900mW Power Limit
 
@@ -48,15 +69,81 @@ void setup()
   while (!Serial) { }
   Serial.println("ESP32 Startup");
 
-  g_OLED.begin();
-  g_OLED.clear();
-  g_OLED.setFont(u8g2_font_profont15_tf);
-  g_lineHeight = g_OLED.getFontAscent() - g_OLED.getFontDescent();        // Descent is a negative number so we add it to the total
+  //g_OLED.begin();
+  //g_OLED.clear();
+  //g_OLED.setFont(u8g2_font_profont15_tf);
+  //g_lineHeight = g_OLED.getFontAscent() - g_OLED.getFontDescent();        // Descent is a negative number so we add it to the total
 
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(g_LEDs, NUM_LEDS);               // Add our LED strip to the FastLED library
   FastLED.setBrightness(g_Brightness);
   set_max_power_indicator_LED(LED_BUILTIN);                               // Light the builtin LED if we power throttle
   FastLED.setMaxPowerInMilliWatts(g_PowerLimit);                          // Set the power limit, above which brightness will be throttled
+
+  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);     // More Intense, Extra Sparking
+  
+
+}
+
+void setup_wifi()
+{
+  delay(10);
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.print(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("Wifi connected");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void callback(char* topic, byte* message, unsigned int length)
+{
+  Serial.print("Message arrived on topic: ");
+  Serial.println(topic);
+  Serial.print("Message: ");
+  String messageTemp;
+
+  for (int i = 0; i < length; i++)
+  {
+    Serial.print((char)message[i]);
+    messageTemp += (char)message[i];
+  }
+  Serial.println();
+
+  if (String(topic) == "esp32/flashtype")
+  {
+    fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
+  }
+
+}
+
+void reconnect()
+{
+  while (!client.connected())
+  {
+    Serial.print("Attempting MQTT connection...");
+    if (client.connect("ESP32Client"))
+    {
+      Serial.println("connected");
+      client.subscribe("esp32/flashtype");
+    }
+    else
+    {
+      Serial.print("failed, rc= ");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      delay(5000);
+    }
+  }
 }
 
 void DrawMarqueeComparison()
@@ -75,6 +162,12 @@ void DrawMarqueeComparison()
 
 void loop() 
 {
+  if (!client.connected())
+  {
+    reconnect();
+  }
+  client.loop();
+  
   bool bLED = 0;
 
   //ClassicFireEffect fire(NUM_LEDS, 30, 100, 3, 2, false, true);   // Outwards from Middle
@@ -83,7 +176,10 @@ void loop()
   //ClassicFireEffect fire(NUM_LEDS, 20, 100, 3, 4, false, false);     // Inwards from End
   //ClassicFireEffect fire(NUM_LEDS, 50, 300, 30, 12, true, false);     // More Intense, Extra Sparking
 
-  ClassicFireEffect fire(NUM_LEDS, 20, 100, 3, NUM_LEDS, true, false);     // Fan with correct rotation
+  //ClassicFireEffect fire(NUM_LEDS, 20, 100, 3, NUM_LEDS, true, false);     // Fan with correct rotation
+
+  //ClassicFireEffect fire(NUM_LEDS, 40, 300, 20, 12, true, false);     // More Intense, Extra Sparking
+  //FireEffectSmooth fire(NUM_LEDS,false, false, 4);
 
   while (true)
   {
@@ -91,6 +187,7 @@ void loop()
     fire.DrawFire();
     FastLED.show(g_Brightness);                          //  Show and delay
 
+    /*
     EVERY_N_MILLISECONDS(250)
     {
       g_OLED.clearBuffer();
@@ -102,6 +199,7 @@ void loop()
       g_OLED.printf("Brite: %d", calculate_max_brightness_for_power_mW(g_Brightness, g_PowerLimit));
       g_OLED.sendBuffer();
     }
+    */
     delay(33);
   }
 }
