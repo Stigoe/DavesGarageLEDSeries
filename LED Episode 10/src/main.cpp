@@ -47,6 +47,8 @@ int iSparking = 300;
 int iSparks = 20;
 int iSparkheight = 12;
 
+bool bChanged = 1;
+
 CRGB g_LEDs[NUM_LEDS] = {0};    // Frame buffer for FastLED
 
 //U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_OLED(U8G2_R2, OLED_RESET, OLED_CLOCK, OLED_DATA);
@@ -59,6 +61,8 @@ int g_PowerLimit = 3000;         // 900mW Power Limit
 #include "marquee.h"
 #include "twinkle.h"
 #include "fire.h"
+
+ClassicFireEffect *fire = nullptr;
 
 void setup() 
 {
@@ -79,7 +83,7 @@ void setup()
   set_max_power_indicator_LED(LED_BUILTIN);                               // Light the builtin LED if we power throttle
   FastLED.setMaxPowerInMilliWatts(g_PowerLimit);                          // Set the power limit, above which brightness will be throttled
 
-  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);     // More Intense, Extra Sparking
+  //ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);     // More Intense, Extra Sparking
   
 
 }
@@ -121,7 +125,8 @@ void callback(char* topic, byte* message, unsigned int length)
 
   if (String(topic) == "esp32/flashtype")
   {
-    fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
+    //fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
+    bChanged = 1;
   }
 
 }
@@ -181,11 +186,17 @@ void loop()
   //ClassicFireEffect fire(NUM_LEDS, 40, 300, 20, 12, true, false);     // More Intense, Extra Sparking
   //FireEffectSmooth fire(NUM_LEDS,false, false, 4);
 
-  while (true)
-  {
-    FastLED.clear();
-    fire.DrawFire();
-    FastLED.show(g_Brightness);                          //  Show and delay
+  if (bChanged == 1)
+    {
+      if (fire != nullptr)
+        delete fire;
+      *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
+      bChanged = 0;
+  
+    }
+  FastLED.clear();
+  fire->DrawFire();
+  FastLED.show(g_Brightness);                          //  Show and delay
 
     /*
     EVERY_N_MILLISECONDS(250)
@@ -200,6 +211,6 @@ void loop()
       g_OLED.sendBuffer();
     }
     */
-    delay(33);
-  }
+  delay(33);
+
 }
