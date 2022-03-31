@@ -18,6 +18,7 @@
 //#include <U8g2lib.h>            // For text on the little on-chip OLED
 #define FASTLED_INTERNAL        // Suppress build banner
 #include <FastLED.h>
+#include <stdio.h>
 
 // MQTT
 #include <WiFi.h>
@@ -45,7 +46,9 @@ int value = 0;
 int iCooling = 40;
 int iSparking = 300;
 int iSparks = 20;
-int iSparkheight = 12;
+int iSparkHeight = 12;
+bool bReversed = true;
+bool bMirrored = false;
 
 bool bChanged = 1;
 
@@ -114,7 +117,9 @@ void callback(char* topic, byte* message, unsigned int length)
   Serial.print("Message arrived on topic: ");
   Serial.println(topic);
   Serial.print("Message: ");
-  String messageTemp;
+  //String messageTemp;
+  char *messageTemp;
+  char delim[] = " ";
 
   for (int i = 0; i < length; i++)
   {
@@ -126,6 +131,18 @@ void callback(char* topic, byte* message, unsigned int length)
   if (String(topic) == "esp32/flashtype")
   {
     //fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
+    char *ptr = strtok(messageTemp, delim);
+    sscanf(ptr, "%d", &iCooling);
+    ptr = strtok(messageTemp, delim);
+    sscanf(ptr, "%d", &iSparking);
+    ptr = strtok(messageTemp, delim);
+    sscanf(ptr, "%d", &iSparks);
+    ptr = strtok(messageTemp, delim);
+    sscanf(ptr, "%d", &iSparkHeight);
+    ptr = strtok(messageTemp, delim);
+    bReversed = ptr;
+    ptr = strtok(messageTemp, delim);
+    bMirrored = ptr;
     bChanged = 1;
   }
 
@@ -190,7 +207,7 @@ void loop()
     {
       if (fire != nullptr)
         delete fire;
-      *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
+      *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
       bChanged = 0;
   
     }
