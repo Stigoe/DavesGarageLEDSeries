@@ -49,6 +49,7 @@ int iSparks = 20;
 int iSparkHeight = 12;
 bool bReversed = true;
 bool bMirrored = false;
+// char iValue[15];
 
 bool bChanged = 1;
 
@@ -119,7 +120,9 @@ void callback(char* topic, byte* message, unsigned int length)
   Serial.print("Message: ");
   //String messageTemp;
   char *messageTemp;
-  char delim[] = " ";
+  char delim[] = ";";
+  char *iVariable;
+  int iValue = 0;
 
   for (int i = 0; i < length; i++)
   {
@@ -132,7 +135,8 @@ void callback(char* topic, byte* message, unsigned int length)
   {
     //fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
     char *ptr = strtok(messageTemp, delim);
-    sscanf(ptr, "%d", &iCooling);
+    
+    /* sscanf(ptr, "%d", &iCooling);
     ptr = strtok(messageTemp, delim);
     sscanf(ptr, "%d", &iSparking);
     ptr = strtok(messageTemp, delim);
@@ -142,7 +146,40 @@ void callback(char* topic, byte* message, unsigned int length)
     ptr = strtok(messageTemp, delim);
     bReversed = ptr;
     ptr = strtok(messageTemp, delim);
-    bMirrored = ptr;
+    bMirrored = ptr; */
+
+    int j = 0;
+
+    while(ptr != NULL) {
+ //     iValue[j] = *ptr;
+      int ret = sscanf(ptr, "%c%d", &iVariable, iValue);
+      ptr = strtok(NULL, delim);
+      if (strncpy(iVariable, "iCo", 3) == 0) {
+        iCooling = iValue;
+      }
+      if (strncpy(iVariable, "iSparki", 7) == 0) {
+        iSparking = iValue;
+      }
+      if (strncpy(iVariable, "iSparks", 7) == 0) {
+        iSparks = iValue;
+      }
+      if (strncpy(iVariable, "iSparkH", 7) == 0) {
+        iSparkHeight = iValue;
+      }
+      if (strncpy(iVariable, "bRev", 4) == 0) {
+        bReversed = iValue;
+      }
+      if (strncpy(iVariable, "bMi", 3) == 0) {
+        bMirrored = iValue;
+      }
+      Serial.print("iVariable = ");
+      Serial.println(iVariable);
+      Serial.print("iValue = ");
+      Serial.println(iValue);
+ //     j = j + 1;
+
+    }
+
     bChanged = 1;
   }
 
