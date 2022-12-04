@@ -14,32 +14,22 @@
 //              Oct-16-2020     davepl      Revised for Episode 09
 //---------------------------------------------------------------------------
 
+
 #include <Arduino.h>            // Arduino Framework
-//#include <U8g2lib.h>            // For text on the little on-chip OLED
+#include <Wifi.h>
+#include <MQTT.h>
+#include <../include/secrets.h>
+
 #define FASTLED_INTERNAL        // Suppress build banner
 #include <FastLED.h>
 #include <stdio.h>
 
-// MQTT
-#include <WiFi.h>
-#include <PubSubClient.h>
 
-const char* ssid = "Tradlosnettverk";
-const char* password = "qwertyuiopasd";
+WiFiClient net;
+MQTTClient client(1024);
 
-// ADD MQTT Broker
-// MQTT Server address
-const char* mqtt_server = "10.10.10.115";
 
-WiFiClient espClient;
-PubSubClient client(espClient);
-long lastMsg = 0;
-char msg[50];
-int value = 0;
-
-//#define OLED_CLOCK  15          // Pins for the OLED display
-//#define OLED_DATA   4
-//#define OLED_RESET  16
+unsigned long lastMillis = 0;
 
 #define NUM_LEDS    40          // FastLED definitions
 #define LED_PIN     5
@@ -49,14 +39,12 @@ int iSparks = 20;
 int iSparkHeight = 12;
 bool bReversed = true;
 bool bMirrored = false;
-// char iValue[15];
 
-bool bChanged = 1;
+bool bChanged = 0;
 
 CRGB g_LEDs[NUM_LEDS] = {0};    // Frame buffer for FastLED
 
-//U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_OLED(U8G2_R2, OLED_RESET, OLED_CLOCK, OLED_DATA);
-//int g_lineHeight = 0;
+int g_lineHeight = 0;
 int g_Brightness = 255;         // 0-255 LED brightness scale
 int g_PowerLimit = 3000;         // 900mW Power Limit
 
@@ -68,30 +56,6 @@ int g_PowerLimit = 3000;         // 900mW Power Limit
 
 ClassicFireEffect *fire = nullptr;
 
-void setup() 
-{
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
-
-  Serial.begin(115200);
-  while (!Serial) { }
-  Serial.println("ESP32 Startup");
-
-  //g_OLED.begin();
-  //g_OLED.clear();
-  //g_OLED.setFont(u8g2_font_profont15_tf);
-  //g_lineHeight = g_OLED.getFontAscent() - g_OLED.getFontDescent();        // Descent is a negative number so we add it to the total
-
-  FastLED.addLeds<WS2812B, LED_PIN, GRB>(g_LEDs, NUM_LEDS);               // Add our LED strip to the FastLED library
-  FastLED.setBrightness(g_Brightness);
-  set_max_power_indicator_LED(LED_BUILTIN);                               // Light the builtin LED if we power throttle
-  FastLED.setMaxPowerInMilliWatts(g_PowerLimit);                          // Set the power limit, above which brightness will be throttled
-
-  //ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);     // More Intense, Extra Sparking
-  
-
-}
-
 void setup_wifi()
 {
   delay(10);
@@ -99,7 +63,7 @@ void setup_wifi()
   Serial.print("Connecting to ");
   Serial.print(ssid);
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(ssid, pass);
 
   while (WiFi.status() != WL_CONNECTED)
   {
@@ -111,77 +75,6 @@ void setup_wifi()
   Serial.println("Wifi connected");
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
-}
-
-void callback(char* topic, byte* message, unsigned int length)
-{
-  Serial.print("Message arrived on topic: ");
-  Serial.println(topic);
-  Serial.print("Message: ");
-  //String messageTemp;
-  char *messageTemp;
-  char delim[] = ";";
-  char *iVariable;
-  int iValue = 0;
-
-  for (int i = 0; i < length; i++)
-  {
-    Serial.print((char)message[i]);
-    messageTemp += (char)message[i];
-  }
-  Serial.println();
-
-  if (String(topic) == "esp32/flashtype")
-  {
-    //fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkheight, true, false);
-    char *ptr = strtok(messageTemp, delim);
-    
-    /* sscanf(ptr, "%d", &iCooling);
-    ptr = strtok(messageTemp, delim);
-    sscanf(ptr, "%d", &iSparking);
-    ptr = strtok(messageTemp, delim);
-    sscanf(ptr, "%d", &iSparks);
-    ptr = strtok(messageTemp, delim);
-    sscanf(ptr, "%d", &iSparkHeight);
-    ptr = strtok(messageTemp, delim);
-    bReversed = ptr;
-    ptr = strtok(messageTemp, delim);
-    bMirrored = ptr; */
-
-    int j = 0;
-
-    while(ptr != NULL) {
- //     iValue[j] = *ptr;
-      int ret = sscanf(ptr, "%c%d", &iVariable, iValue);
-      ptr = strtok(NULL, delim);
-      if (strncpy(iVariable, "iCo", 3) == 0) {
-        iCooling = iValue;
-      }
-      if (strncpy(iVariable, "iSparki", 7) == 0) {
-        iSparking = iValue;
-      }
-      if (strncpy(iVariable, "iSparks", 7) == 0) {
-        iSparks = iValue;
-      }
-      if (strncpy(iVariable, "iSparkH", 7) == 0) {
-        iSparkHeight = iValue;
-      }
-      if (strncpy(iVariable, "bRev", 4) == 0) {
-        bReversed = iValue;
-      }
-      if (strncpy(iVariable, "bMi", 3) == 0) {
-        bMirrored = iValue;
-      }
-      Serial.print("iVariable = ");
-      Serial.println(iVariable);
-      Serial.print("iValue = ");
-      Serial.println(iValue);
- //     j = j + 1;
-
-    }
-
-    bChanged = 1;
-  }
 
 }
 
@@ -190,7 +83,7 @@ void reconnect()
   while (!client.connected())
   {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("ESP32Client"))
+    if (client.connect(mqtt_server, mqtt_user, mqtt_pass))
     {
       Serial.println("connected");
       client.subscribe("esp32/flashtype");
@@ -198,11 +91,96 @@ void reconnect()
     else
     {
       Serial.print("failed, rc= ");
-      Serial.print(client.state());
+      Serial.print(client.lastError());
       Serial.println(" try again in 5 seconds");
       delay(5000);
     }
   }
+}
+
+void messageReceived(MQTTClient *client, char topic[], char message[], int length)
+  {
+  Serial.print("Incoming: ");
+  Serial.print(topic);
+  Serial.print(" - ");
+  Serial.println(message);
+
+  if (String(topic) == "esp32/flashtype")
+  {
+    char delim[] = ";";
+    char iVariable[15];
+    int iValue = 0;
+
+    //fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, true, false);
+    char *ptr = strtok(message, delim);
+
+    Serial.print("message: ");
+    Serial.println(ptr);
+  
+
+    while(ptr != NULL) {
+      int ret = sscanf(ptr, "%s %d", iVariable, &iValue);
+
+      ptr = strtok(NULL, delim);
+      if (strncmp(iVariable, "iCo", 3) == 0) {
+        iCooling = iValue;
+      }
+      if (strncmp(iVariable, "iSparki", 7) == 0) {
+        iSparking = iValue;
+      }
+      if (strncmp(iVariable, "iSparks", 7) == 0) {
+        iSparks = iValue;
+      }
+      if (strncmp(iVariable, "iSparkH", 7) == 0) {
+        iSparkHeight = iValue;
+      }
+      if (strncmp(iVariable, "bRev", 4) == 0) {
+        bReversed = iValue;
+      }
+      if (strncmp(iVariable, "bMi", 3) == 0) {
+        bMirrored = iValue;
+      }
+      Serial.print("iVariable = ");
+      Serial.println(iVariable);
+      Serial.print("iValue = ");
+      Serial.println(iValue);
+
+    }
+
+    bChanged = 1;
+  }
+
+}
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+
+  Serial.begin(115200);
+  while (!Serial) { }
+  Serial.println("ESP32 Startup");
+
+  setup_wifi();
+
+  // Note: Local domain names (e.g. "Computer.local" on OSX) are not supported
+  // by Arduino. You need to set the IP address directly.
+  //
+  // MQTT brokers usually use port 8883 for secure connections.
+  client.begin(mqtt_server, 1883, net);
+  client.onMessageAdvanced(messageReceived);
+
+  reconnect();
+
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(g_LEDs, NUM_LEDS);               // Add our LED strip to the FastLED library
+  FastLED.setBrightness(g_Brightness);
+  set_max_power_indicator_LED(LED_BUILTIN);                               // Light the builtin LED if we power throttle
+  FastLED.setMaxPowerInMilliWatts(g_PowerLimit);                          // Set the power limit, above which brightness will be throttled
+
+//  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);     // More Intense, Extra Sparking
+  Serial.println("Before starting Fire");
+//  *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);     // More Intense, Extra Sparking
+//  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);     // More Intense, Extra Sparking
+  Serial.println("After starting Fire");
 }
 
 void DrawMarqueeComparison()
@@ -219,52 +197,40 @@ void DrawMarqueeComparison()
   }
 }
 
-void loop() 
-{
-  if (!client.connected())
-  {
-    reconnect();
-  }
+void loop() {
   client.loop();
-  
-  bool bLED = 0;
+  delay(10);  // <- fixes some issues with WiFi stability
 
-  //ClassicFireEffect fire(NUM_LEDS, 30, 100, 3, 2, false, true);   // Outwards from Middle
-  //ClassicFireEffect fire(NUM_LEDS, 30, 100, 3, 2, true, true);    // Inwards toward Middle
-  //ClassicFireEffect fire(NUM_LEDS, 20, 100, 3, 4, true, false);     // Outwards from Zero
-  //ClassicFireEffect fire(NUM_LEDS, 20, 100, 3, 4, false, false);     // Inwards from End
-  //ClassicFireEffect fire(NUM_LEDS, 50, 300, 30, 12, true, false);     // More Intense, Extra Sparking
 
-  //ClassicFireEffect fire(NUM_LEDS, 20, 100, 3, NUM_LEDS, true, false);     // Fan with correct rotation
+  if (millis() - lastMillis > 1000) {
+    if (!client.connected()) {
+      Serial.print("lastError: ");
+      Serial.println(client.lastError());
+      reconnect();
+    }
+    lastMillis = millis();
+  }
 
-  //ClassicFireEffect fire(NUM_LEDS, 40, 300, 20, 12, true, false);     // More Intense, Extra Sparking
-  //FireEffectSmooth fire(NUM_LEDS,false, false, 4);
+//  bool bLED = 0;
 
   if (bChanged == 1)
     {
+      Serial.println("Inside bChanged");
       if (fire != nullptr)
         delete fire;
-      *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
+        *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
       bChanged = 0;
   
     }
-  FastLED.clear();
-  fire->DrawFire();
-  FastLED.show(g_Brightness);                          //  Show and delay
 
-    /*
-    EVERY_N_MILLISECONDS(250)
-    {
-      g_OLED.clearBuffer();
-      g_OLED.setCursor(0, g_lineHeight);
-      g_OLED.printf("FPS  : %u", FastLED.getFPS());
-      g_OLED.setCursor(0, g_lineHeight * 2);
-      g_OLED.printf("Power: %u mW", calculate_unscaled_power_mW(g_LEDs, 4));
-      g_OLED.setCursor(0, g_lineHeight * 3);
-      g_OLED.printf("Brite: %d", calculate_max_brightness_for_power_mW(g_Brightness, g_PowerLimit));
-      g_OLED.sendBuffer();
-    }
-    */
+  FastLED.clear();
+  Serial.println("After Fastled.clear");
+  fire->DrawFire();
+  Serial.println("After DrawFire");
+  FastLED.show(g_Brightness);                          //  Show and delay
+  Serial.println("After Fastled.show");
+
   delay(33);
 
 }
+
