@@ -2,7 +2,7 @@
 //
 // NightDriver - (c) 2018 Dave Plummer.  All Rights Reserved.
 //
-// File:        LED Episode 08
+// File:        LED Episode 10
 //
 // Description:
 //
@@ -12,21 +12,25 @@
 //              Oct-05-2020     davepl      Revised for Episode 07
 //              Oct-11-2020     davepl      Revised for Episode 08
 //              Oct-16-2020     davepl      Revised for Episode 09
+//              Dec-05-2022     Stigoe      Added support for Wifi and MQTT
 //---------------------------------------------------------------------------
 
 
 #include <Arduino.h>            // Arduino Framework
 #include <Wifi.h>
 #include <MQTT.h>
-#include <../include/secrets.h>
+#include <secrets.h>
 
 #define FASTLED_INTERNAL        // Suppress build banner
 #include <FastLED.h>
 #include <stdio.h>
 
+#define USE_WIFI            1   // Select Wifi/MQTT or not
 
+#if USE_WIFI
 WiFiClient net;
 MQTTClient client(1024);
+#endif
 
 
 unsigned long lastMillis = 0;
@@ -44,7 +48,6 @@ bool bChanged = 0;
 
 CRGB g_LEDs[NUM_LEDS] = {0};    // Frame buffer for FastLED
 
-int g_lineHeight = 0;
 int g_Brightness = 255;         // 0-255 LED brightness scale
 int g_PowerLimit = 3000;         // 900mW Power Limit
 
@@ -54,8 +57,11 @@ int g_PowerLimit = 3000;         // 900mW Power Limit
 #include "twinkle.h"
 #include "fire.h"
 
+#if USE_WIFI
 ClassicFireEffect *fire = nullptr;
+#endif
 
+#if USE_WIFI
 void setup_wifi()
 {
   delay(10);
@@ -111,7 +117,6 @@ void messageReceived(MQTTClient *client, char topic[], char message[], int lengt
     char iVariable[15];
     int iValue = 0;
 
-    //fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, true, false);
     char *ptr = strtok(message, delim);
 
     Serial.print("message: ");
@@ -151,6 +156,8 @@ void messageReceived(MQTTClient *client, char topic[], char message[], int lengt
   }
 
 }
+#endif
+
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -160,6 +167,7 @@ void setup() {
   while (!Serial) { }
   Serial.println("ESP32 Startup");
 
+  #if USE_WIFI
   setup_wifi();
 
   // Note: Local domain names (e.g. "Computer.local" on OSX) are not supported
@@ -170,17 +178,16 @@ void setup() {
   client.onMessageAdvanced(messageReceived);
 
   reconnect();
+  #endif
 
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(g_LEDs, NUM_LEDS);               // Add our LED strip to the FastLED library
   FastLED.setBrightness(g_Brightness);
   set_max_power_indicator_LED(LED_BUILTIN);                               // Light the builtin LED if we power throttle
   FastLED.setMaxPowerInMilliWatts(g_PowerLimit);                          // Set the power limit, above which brightness will be throttled
 
-//  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);     // More Intense, Extra Sparking
-  Serial.println("Before starting Fire");
-//  *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);     // More Intense, Extra Sparking
-//  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);     // More Intense, Extra Sparking
-  Serial.println("After starting Fire");
+  #if USE_WIFI
+  fire = new ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
+  #endif
 }
 
 void DrawMarqueeComparison()
@@ -198,6 +205,7 @@ void DrawMarqueeComparison()
 }
 
 void loop() {
+  #if USE_WIFI
   client.loop();
   delay(10);  // <- fixes some issues with WiFi stability
 
@@ -211,26 +219,35 @@ void loop() {
     lastMillis = millis();
   }
 
-//  bool bLED = 0;
 
   if (bChanged == 1)
     {
-      Serial.println("Inside bChanged");
       if (fire != nullptr)
         delete fire;
-        *fire = ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
+        fire = new ClassicFireEffect(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
       bChanged = 0;
   
     }
-
+  
   FastLED.clear();
-  Serial.println("After Fastled.clear");
   fire->DrawFire();
-  Serial.println("After DrawFire");
   FastLED.show(g_Brightness);                          //  Show and delay
-  Serial.println("After Fastled.show");
 
   delay(33);
+
+  #else
+  ClassicFireEffect fire(NUM_LEDS, iCooling, iSparking, iSparks, iSparkHeight, bReversed, bMirrored);
+
+  while (true)
+  {
+  FastLED.clear();
+  fire.DrawFire();
+  FastLED.show(g_Brightness);                          //  Show and delay
+
+  delay(33);
+
+  }
+  #endif
 
 }
 
